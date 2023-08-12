@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="PYTHON_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/.idea/ZeppelinRemoteNotebooks" />
+      <excludeFolder url="file://$MODULE_DIR$/mlruns" />
+      <excludeFolder url="file://$MODULE_DIR$/mlruns/0/47b67c1040c540478fcfbd4dc89bdae4/artifacts/model/data" />
+      <excludeFolder url="file://$MODULE_DIR$/mlruns/0/ad6759dddeec4aa99316cee52b4c1681/artifacts/model/data" />
+      <excludeFolder url="file://$MODULE_DIR$/venv" />
+    </content>
+    <orderEntry type="jdk" jdkName="Python 3.9 (LLM_Data_Annotation)" jdkType="Python SDK" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+  <component name="PyDocumentationSettings">
+    <option name="renderExternalDocumentation" value="true" />
+  </component>
+</module>
