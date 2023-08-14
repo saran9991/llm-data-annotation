@@ -9,6 +9,9 @@ import torch.nn as nn
 import numpy as np
 import mlflow
 import mlflow.pytorch
+from mlflow.tracking import MlflowClient
+from mlflow.entities import ViewType
+
 from sklearn.preprocessing import LabelEncoder
 
 
@@ -95,10 +98,21 @@ def eval_model(model, data_loader, device, sentiments):
     predictions = torch.stack(predictions).cpu()
     real_values = torch.stack(real_values).cpu()
     return correct_predictions.double() / len(data_loader.dataset), classification_report(real_values, predictions, target_names=sentiments.keys())
-#%%
+
 
 def train_bert(model_path, data_path):
-    with mlflow.start_run():
+
+    EXPERIMENT_NAME = "llm_seminar_data_annotation"
+    client = MlflowClient()
+    experiment_id = client.get_experiment_by_name(EXPERIMENT_NAME)
+    if experiment_id is None:
+        experiment_id = mlflow.create_experiment(EXPERIMENT_NAME)
+    else:
+        experiment_id = experiment_id.experiment_id
+
+    model_name = "_".join(model_path.split("/")[-1].split("_")[:-2]) # 'bert_sentiment_gpt35_1000' for your example path
+
+    with mlflow.start_run(experiment_id=experiment_id):
         DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         MODEL_NAME = 'bert-base-uncased'
         BATCH_SIZE = 16
@@ -111,7 +125,6 @@ def train_bert(model_path, data_path):
         sentiments = {'positive': 0, 'neutral': 1, 'negative': 2}
 
         data = pd.read_csv(data_path, index_col=[0]) #LLM Annotated Dataset
-        #data['predicted_labels'] = data['predicted_labels'].apply(lambda x: x.replace('.', ''))
         data['predicted_labels'] = data['predicted_labels'].map(sentiments)
 
         train_texts, val_texts, train_targets, val_targets = train_test_split(data['text'], data['predicted_labels'], test_size=0.2)
@@ -130,24 +143,38 @@ def train_bert(model_path, data_path):
 
         model = BertForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=len(sentiments)).to(DEVICE)
 
-        # Train
         optimizer = AdamW(model.parameters(), lr=2e-5)
         for epoch in range(EPOCHS):
             print(f'Epoch {epoch + 1}/{EPOCHS}')
             print('-' * 10)
-
             train_acc, train_loss = train_epoch(model, train_loader, optimizer, DEVICE)
+            print(f'Train loss: {train_loss}, accuracy: {train_acc}')
+            val_acc, val_report = eval_model(model, val_loader, DEVICE, sentiments)
+            print(f'Val accuracy: {val_acc}\n')
+
             mlflow.log_metric("train_acc", train_acc)
             mlflow.log_metric("train_loss", train_loss)
-
-            print(f'Train loss: {train_loss}, accuracy: {train_acc}')
-
-            val_acc, val_report = eval_model(model, val_loader, DEVICE, sentiments)
             mlflow.log_metric("val_acc", val_acc)
-
-            print(f'Val accuracy: {val_acc}\n')
-            print(val_report)
+            #print(val_report)
 
         torch.save(model, model_path)
+        result = mlflow.pytorch.log_model(model, "model")
+
         mlflow.pytorch.log_model(model, "model")
+        mlflow.register_model(
+            model_uri=f"runs:/{mlflow.active_run().info.run_id}/model",
+            name=model_name
+        )
+        df = mlflow.search_runs([experiment_id], order_by=["metrics.val_acc DESC"])
+        best_run_id = df.loc[0, 'run_id']
+
+        best_model_uri = f"runs:/{best_run_id}/model" #Best model
+
+
+        best_val_acc = df.loc[0, "metrics.val_acc"]
+        print(f"Model Path: {model_path}")
+        print(f"Best Model Run ID: {best_run_id}")
+        print(f"Best Validation Accuracy: {best_val_acc:.2f}")
+
+        best_model = mlflow.pytorch.load_model(best_model_uri) # For further usage
     mlflow.end_run()

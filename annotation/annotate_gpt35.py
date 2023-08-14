@@ -25,9 +25,8 @@ def analyze_gpt35(text):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=messages,
-        max_tokens=10,
+        max_tokens=3,
         n=3,
-        stop=None,
         temperature=0.5
     )
 
