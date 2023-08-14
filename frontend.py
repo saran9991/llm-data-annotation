@@ -3,8 +3,16 @@ import requests
 import pandas as pd
 from io import StringIO
 
-st.title("Data Annotation App")
+# Set Page title and icon
+st.set_page_config(page_title="Data Annotation", page_icon="✏️", layout="wide")
 
+# App Header
+st.title("LLM Seminar Data Annotation")
+st.write(
+    """
+    An interactive tool to annotate your dataset, preview annotations, and save changes.
+    """
+)
 uploaded_file = st.file_uploader("Choose a dataset (CSV)", type="csv")
 
 if uploaded_file:
@@ -23,17 +31,19 @@ if uploaded_file:
             st.error("Failed to annotate dataset.")
 
 if "filtered_dataset" in st.session_state:
-    st.dataframe(st.session_state.filtered_dataset)
+    st.subheader("Filtered Dataset Preview")
+    st.table(st.session_state.filtered_dataset)  # Use st.table for better styling
 
-    # Editing the labels
-    row_index = st.number_input("Edit label for row:", min_value=0,
-                                max_value=st.session_state.filtered_dataset.shape[0] - 1, value=0, step=1)
-    options = st.selectbox("Select new label:", options=["negative", "neutral", "positive"])
-    if st.button("Update Label"):
+    st.subheader("Edit Labels")
+    row_index = st.sidebar.number_input("Edit label for row:", min_value=0,
+                                        max_value=st.session_state.filtered_dataset.shape[0] - 1, value=0, step=1)
+    options = st.sidebar.selectbox("Select new label:", options=["negative", "neutral", "positive"])
+    if st.sidebar.button("Update Label"):
         st.session_state.filtered_dataset.loc[row_index, "predicted_labels"] = options
+        st.info("Label updated successfully!")
 
-    save_path = st.text_input("Enter the path where you want to save the merged dataset:")
-    if st.button("Merge and Save"):
+    save_path = st.sidebar.text_input("Enter the path where you want to save the merged dataset:")
+    if st.sidebar.button("Merge and Save"):
         try:
             if 'dataset' not in st.session_state:
                 st.warning("No original dataset available for merging.")
@@ -44,7 +54,7 @@ if "filtered_dataset" in st.session_state:
             merged_dataset = annotated_dataset.merge(st.session_state.filtered_dataset[['text', 'predicted_labels']],
                                                      on='text', how='left')
 
-            # Replace the labels in the annotated_dataset with the labels from the filtered_dataset for the rows that have been updated
+            # Replace the labels in the annotated_dataset with the labels from the filtered_dataset
             merged_dataset['predicted_labels'] = merged_dataset['predicted_labels_y'].combine_first(
                 merged_dataset['predicted_labels_x'])
 
@@ -55,3 +65,4 @@ if "filtered_dataset" in st.session_state:
             st.success(f"Dataset saved successfully at {save_path}")
         except Exception as e:
             st.error(f"An error occurred: {e}")
+
