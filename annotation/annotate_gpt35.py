@@ -17,6 +17,7 @@ def analyze_gpt35(text):
     global index
     global accumulated_cost
     global accumulated_tokens
+    logs = []
     messages = [
         {"role": "system", "content": "Your task is to analyze text and classify its sentiment as either 'positive', 'negative', or 'neutral' in a single word."},
         {"role": "user", "content": f"Classify the sentiment of: '{text}'."}
@@ -42,8 +43,15 @@ def analyze_gpt35(text):
     print(f"Accumulated tokens so far: {accumulated_tokens}")
     print(f"Accumulated cost so far: {accumulated_cost}\n")
 
+    log_msg1 = f"Total tokens used for this call: {total_tokens_used}"
+    log_msg2 = f"Index: {index}"
+    log_msg3 = f"Cost for this call: {call_cost}"
+    log_msg4 = f"Accumulated tokens so far: {accumulated_tokens}"
+    log_msg5 = f"Accumulated cost so far: {accumulated_cost}"
+    logs.extend([log_msg1, log_msg2, log_msg3, log_msg4, log_msg5])
+
     response_texts = [choice.message.content.strip().lower() for choice in response.choices]
     primary_response = response_texts[0]
     confidence_score = response_texts.count(primary_response) / 3
 
-    return primary_response, confidence_score
+    return primary_response, confidence_score, logs
