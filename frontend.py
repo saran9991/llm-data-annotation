@@ -133,14 +133,17 @@ if "filtered_dataset" in st.session_state:
 
     if st.session_state.get('merged_successful'):
         experiment_name = st.text_input("Enter the experiment name:", value="llm_seminar_data_annotation")
+        epoch_input = int(st.text_input("Enter the number of Epochs for BERT Training:", value="1"))
+        model_name_inp = st.text_input("Enter the model name:", value="bert_sentiment_gpt35_200.pt")
 
         if st.button("Train Model"):
             if not hasattr(st.session_state, 'save_path'):
                 st.warning("No dataset available for training. Please upload, annotate, and then merge first.")
             else:
                 # Modify the train_bert function to accept experiment_name
-                model_path, best_run_id, best_val_acc = train_bert("models/bert_sentiment_gpt35_1000_model3.pt", st.session_state.save_path, experiment_name)
-                st.success(f"Model trained successfully and saved at {model_path}")
+                model_path, best_run_id, best_val_acc, val_acc = train_bert(f"models/{model_name_inp}", st.session_state.save_path, experiment_name, epoch_input, model_name_inp)
+                st.success(f"Model trained successfully and saved at {model_path}", icon='✅')
+                st.write(f"Current Model's trained Validation Accuracy: {val_acc:.2f}")
                 st.write(f"Best Model Run ID: {best_run_id}")
                 st.write(f"Best Validation Accuracy: {best_val_acc:.2f}")
 
