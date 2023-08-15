@@ -100,9 +100,9 @@ def eval_model(model, data_loader, device, sentiments):
     return correct_predictions.double() / len(data_loader.dataset), classification_report(real_values, predictions, target_names=sentiments.keys())
 
 
-def train_bert(model_path, data_path):
+def train_bert(model_path, data_path, experiment_name):
 
-    EXPERIMENT_NAME = "llm_seminar_data_annotation"
+    EXPERIMENT_NAME = experiment_name
     client = MlflowClient()
     experiment_id = client.get_experiment_by_name(EXPERIMENT_NAME)
     if experiment_id is None:
@@ -110,7 +110,8 @@ def train_bert(model_path, data_path):
     else:
         experiment_id = experiment_id.experiment_id
 
-    model_name = "_".join(model_path.split("/")[-1].split("_")[:-2]) # 'bert_sentiment_gpt35_1000' for your example path
+    #model_name = "_".join(model_path.split("/")[-1].split("_")[:-2]) # 'bert_sentiment_gpt35_1000' for example path
+    model_name = 'bert_sentiment_gpt35'
 
     with mlflow.start_run(experiment_id=experiment_id):
         DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -124,7 +125,7 @@ def train_bert(model_path, data_path):
 
         sentiments = {'positive': 0, 'neutral': 1, 'negative': 2}
 
-        data = pd.read_csv(data_path, index_col=[0]) #LLM Annotated Dataset
+        data = pd.read_csv(data_path) #LLM Annotated Dataset
         data['predicted_labels'] = data['predicted_labels'].map(sentiments)
 
         train_texts, val_texts, train_targets, val_targets = train_test_split(data['text'], data['predicted_labels'], test_size=0.2)
@@ -178,3 +179,4 @@ def train_bert(model_path, data_path):
 
         best_model = mlflow.pytorch.load_model(best_model_uri) # For further usage
     mlflow.end_run()
+    return model_path, best_run_id, best_val_acc
