@@ -100,7 +100,7 @@ def eval_model(model, data_loader, device, sentiments):
     return correct_predictions.double() / len(data_loader.dataset), classification_report(real_values, predictions, target_names=sentiments.keys())
 
 
-def train_bert(model_path, data_path, experiment_name):
+def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_inp, progress_callback=None):
 
     EXPERIMENT_NAME = experiment_name
     client = MlflowClient()
@@ -111,13 +111,14 @@ def train_bert(model_path, data_path, experiment_name):
         experiment_id = experiment_id.experiment_id
 
     #model_name = "_".join(model_path.split("/")[-1].split("_")[:-2]) # 'bert_sentiment_gpt35_1000' for example path
-    model_name = 'bert_sentiment_gpt35'
+    #model_name = 'bert_sentiment_gpt35'
+    model_name  = model_name_inp
 
     with mlflow.start_run(experiment_id=experiment_id):
         DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         MODEL_NAME = 'bert-base-uncased'
         BATCH_SIZE = 16
-        EPOCHS = 1
+        EPOCHS = epoch_input
 
         mlflow.log_param("batch_size", BATCH_SIZE)
         mlflow.log_param("epochs", EPOCHS)
@@ -146,6 +147,8 @@ def train_bert(model_path, data_path, experiment_name):
 
         optimizer = AdamW(model.parameters(), lr=2e-5)
         for epoch in range(EPOCHS):
+            if progress_callback:
+                progress_callback((epoch + 1) / EPOCHS)
             print(f'Epoch {epoch + 1}/{EPOCHS}')
             print('-' * 10)
             train_acc, train_loss = train_epoch(model, train_loader, optimizer, DEVICE)
@@ -179,4 +182,4 @@ def train_bert(model_path, data_path, experiment_name):
 
         best_model = mlflow.pytorch.load_model(best_model_uri) # For further usage
     mlflow.end_run()
-    return model_path, best_run_id, best_val_acc
+    return model_path, best_run_id, best_val_acc, val_acc
