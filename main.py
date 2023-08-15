@@ -29,4 +29,4 @@ def annotate_dataset(filepath):
 
 if __name__ == "__main__":
     annotate_dataset('data/unannotated/unannotated_50.csv')
-    train_bert('models/bert_sentiment_gpt35_1000_model2.pt', 'data/annotated/gpt35_conf_scores_1000_preproc.csv')
+    train_bert('models/bert_sentiment_gpt35_1000_model3.pt', 'data/annotated/gpt35_conf_scores_1000_preproc.csv')
