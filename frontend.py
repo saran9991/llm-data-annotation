@@ -7,7 +7,7 @@ from io import StringIO
 st.set_page_config(page_title="Data Annotation", page_icon="✏️", layout="wide")
 
 # App Header
-st.title("LLM Seminar Data Annotation")
+st.title("LLM Seminar Data Annotation  ✏️")
 st.write(
     """
     An interactive tool to annotate your dataset, preview annotations, and save changes.
