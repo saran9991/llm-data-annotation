@@ -26,7 +26,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# App Header
 st.title("LLM Seminar Data Annotation  ✏️")
 st.write(
     """
