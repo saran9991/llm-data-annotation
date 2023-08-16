@@ -2,7 +2,7 @@ key.txt
 organization.txt
 venv/
 mlruns/
-.idea/.idea/
+.idea/
 __pycache__/
 data/annotated/*.csv
 data/filtered/*.csv
