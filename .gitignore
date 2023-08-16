@@ -2,3 +2,10 @@ key.txt
 organization.txt
 venv/
 mlruns/
+.idea/
+__pycache__/
+data/annotated/*.csv
+data/filtered/*.csv
+data/merged/*.csv
+data/original/*.csv
+models/**/*.pt
