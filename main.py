@@ -1,29 +1,32 @@
-from annotation.annotate_davinci import analyze_davinci
+from annotation.annotate_gpt35 import analyze_gpt35
 import pandas as pd
 from sklearn.metrics import accuracy_score
 from models.train_bert import train_bert
+from annotation.data_versioning import get_next_version
+import os
 
+def annotate_dataset(filepath):
+    unannotated = pd.read_csv(filepath, encoding='unicode_escape', index_col=[0])
+    original_dataset = pd.read_csv('data/original/train.csv',encoding='unicode_escape')
 
-def annotate_dataset():
-    unannotated = pd.read_csv('data/sentiment/unannotated/unannotated_sentiment_dataset.csv',
-                              encoding= 'unicode_escape', index_col=[0])
+    sentiments_and_scores = unannotated['text'].apply(analyze_gpt35)
+    unannotated['predicted_labels'] = [x[0] for x in sentiments_and_scores]
+    unannotated['confidence_score'] = [x[1] for x in sentiments_and_scores]
 
-    original_dataset = pd.read_csv('data/sentiment/original/train.csv',
-                                   encoding= 'unicode_escape') # Has original annotations
+    unannotated = unannotated[unannotated['predicted_labels'].isin(['positive', 'negative', 'neutral'])]
 
-    num_rows = 1
-    unannotated['predicted_labels'] = unannotated['text'].iloc[0:num_rows].apply(analyze_davinci)
-    unannotated['annotation_correct'] = (unannotated['predicted_labels'] == original_dataset['sentiment']).astype(int)
-    print('Annotated dataset head: ',unannotated.head())
-    #unannotated.iloc[0:num_rows].to_csv('data/sentiment/davinci003_annotated_300.csv')
+    version = get_next_version('data/annotated', 'annotated_')
+    annotated_file_path = os.path.join('data', 'annotated', f"annotated_{version}.csv")
+    unannotated.to_csv(annotated_file_path)
+    print('Annotated dataset head: ', unannotated.head())
 
     accuracy = accuracy_score(
-        original_dataset['sentiment'].iloc[0:num_rows].astype('str').values,
-        unannotated['annotation_correct'].iloc[0:num_rows].astype('str').values
+        original_dataset.loc[list(set(unannotated.index) & set(original_dataset.index)), 'sentiment'].values,
+        unannotated.loc[list(set(unannotated.index) & set(original_dataset.index)), 'predicted_labels'].values
     )
     print(f"Accuracy of GPT 3.5's annotations: {accuracy}")
+    return annotated_file_path
 
 if __name__ == "__main__":
-    annotate_dataset()
-    train_bert('models/gpt35/bert_sentiment_gpt35_400_2_model.pt', 'data/sentiment/annotated/gpt35/gpt35_annotated_400.csv')
-
+    annotate_dataset('data/unannotated/unannotated_50.csv')
+    train_bert('models/bert_sentiment_gpt35_1000_model3.pt', 'data/annotated/gpt35_conf_scores_1000_preproc.csv')
