@@ -110,7 +110,7 @@ def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_i
     else:
         experiment_id = experiment_id.experiment_id
 
-    #model_name = "_".join(model_path.split("/")[-1].split("_")[:-2]) # 'bert_sentiment_gpt35_1000' for example path
+    #model_name = "_".join(model_path.split("/")[-1].split("_")[:-2])
     #model_name = 'bert_sentiment_gpt35'
     model_name  = model_name_inp
 
