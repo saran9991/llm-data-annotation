@@ -102,6 +102,7 @@ if "filtered_dataset" in st.session_state:
                 merged_dataset['predicted_labels_x'])
 
             merged_dataset = merged_dataset.drop(columns=['predicted_labels_x', 'predicted_labels_y'])
+            merged_dataset = merged_dataset[merged_dataset['predicted_labels'].apply(lambda x: x.lower() in ['positive', 'negative', 'neutral'])]
 
             version = get_next_version("data/merged", 'merged_')
             save_path = Path("data/merged") / f"merged_{version}.csv"

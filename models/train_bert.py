@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import BertTokenizerFast, BertForSequenceClassification, AdamW
+from transformers import BertTokenizerFast, BertForSequenceClassification
+from torch.optim import AdamW
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import pandas as pd
@@ -10,10 +11,81 @@ import numpy as np
 import mlflow
 import mlflow.pytorch
 from mlflow.tracking import MlflowClient
-from mlflow.entities import ViewType
-
+from sklearn.base import BaseEstimator
+from cleanlab.classification import CleanLearning
 from sklearn.preprocessing import LabelEncoder
 
+
+class BertSentimentClassifier(BaseEstimator):
+    def __init__(self, model_path='bert-base-uncased', device=None, epochs = 1):
+        self.model_path = model_path
+        self.tokenizer = BertTokenizerFast.from_pretrained(model_path)
+        self.model = BertForSequenceClassification.from_pretrained(model_path, num_labels=3)
+        self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model.to(self.device)
+        self.max_len = 128
+        self.epochs = epochs
+
+    def fit(self, X, y):
+        self.classes_ = np.unique(y)
+
+        train_data = SentimentDataset(X, y, self.tokenizer, max_len=self.max_len)
+        train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
+
+        optimizer = AdamW(self.model.parameters(), lr=2e-5)
+
+        for epoch in range(self.epochs):
+            train_acc, train_loss = train_epoch(self.model, train_loader, optimizer, self.device)
+            print(f'Epoch {epoch + 1}/{self.epochs} - Train loss: {train_loss}, accuracy: {train_acc}')
+
+    def predict(self, X):
+        X_list = X.tolist()
+        encoding = self.tokenizer.batch_encode_plus(
+            X_list,
+            add_special_tokens=True,
+            max_length=128,
+            return_token_type_ids=False,
+            padding='max_length',
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+
+        input_ids = encoding['input_ids'].to(self.device)
+        attention_mask = encoding['attention_mask'].to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+            _, preds = torch.max(outputs.logits, dim=1)
+
+        return self.classes_[preds.cpu().numpy()]
+
+    def predict_proba(self, X):
+        X_list = X.tolist()  # Convert to list
+        encoding = self.tokenizer.batch_encode_plus(
+            X_list,  # Updated this line
+            add_special_tokens=True,
+            max_length=128,
+            return_token_type_ids=False,
+            padding='max_length',
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+
+        input_ids = encoding['input_ids'].to(self.device)
+        attention_mask = encoding['attention_mask'].to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+        # Convert logits to probabilities
+        probs = torch.nn.functional.softmax(outputs.logits, dim=1)
+
+        return probs.cpu().numpy()
+
+    def score(self, X, y):
+        y_pred = self.predict(X)
+        accuracy = (y_pred == y).mean()
+        return accuracy
 
 
 class SentimentDataset(Dataset):
@@ -100,8 +172,9 @@ def eval_model(model, data_loader, device, sentiments):
     return correct_predictions.double() / len(data_loader.dataset), classification_report(real_values, predictions, target_names=sentiments.keys())
 
 
-def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_inp, progress_callback=None):
-
+def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_inp,
+                             progress_callback=None):
+    # MLflow setup
     EXPERIMENT_NAME = experiment_name
     client = MlflowClient()
     experiment_id = client.get_experiment_by_name(EXPERIMENT_NAME)
@@ -109,77 +182,68 @@ def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_i
         experiment_id = mlflow.create_experiment(EXPERIMENT_NAME)
     else:
         experiment_id = experiment_id.experiment_id
-
-    #model_name = "_".join(model_path.split("/")[-1].split("_")[:-2])
-    #model_name = 'bert_sentiment_gpt35'
-    model_name  = model_name_inp
+    model_name = model_name_inp
 
     with mlflow.start_run(experiment_id=experiment_id):
+
         DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        MODEL_NAME = 'bert-base-uncased'
-        BATCH_SIZE = 16
-        EPOCHS = epoch_input
 
-        mlflow.log_param("batch_size", BATCH_SIZE)
-        mlflow.log_param("epochs", EPOCHS)
-        mlflow.log_param("model_name", MODEL_NAME)
+        mlflow.log_param("epochs", epoch_input)
+        mlflow.log_param("model_name", model_name)
 
-        sentiments = {'positive': 0, 'neutral': 1, 'negative': 2}
+        #sentiments = {'positive': 0, 'neutral': 1, 'negative': 2}
+        data = pd.read_csv(data_path, encoding='unicode_escape')
+        data = data.dropna()
+        #data['predicted_labels'] = data['predicted_labels'].map(sentiments)
 
-        data = pd.read_csv(data_path) #LLM Annotated Dataset
-        data['predicted_labels'] = data['predicted_labels'].map(sentiments)
+        raw_texts, raw_labels = data["text"].values, data["predicted_labels"].values
+        raw_train_texts, raw_test_texts, raw_train_labels, raw_test_labels = train_test_split(raw_texts, raw_labels,
+                                                                                              test_size=0.2)
 
-        train_texts, val_texts, train_targets, val_targets = train_test_split(data['text'], data['predicted_labels'], test_size=0.2)
+        # Label encoding the labels
+        encoder = LabelEncoder()
+        encoder.fit(raw_train_labels)
+        train_labels = encoder.transform(raw_train_labels)
+        test_labels = encoder.transform(raw_test_labels)
 
-        train_texts = train_texts.reset_index(drop=True)
-        val_texts = val_texts.reset_index(drop=True)
-        train_targets = train_targets.reset_index(drop=True)
-        val_targets = val_targets.reset_index(drop=True)
+        # Define classifier and fit
+        clf = BertSentimentClassifier(epochs= epoch_input)
+        clf.fit(raw_train_texts, train_labels)
+        initial_accuracy = clf.score(raw_test_texts, test_labels)
+        print(f'Initial Accuracy: {initial_accuracy:.4f}')
 
-        tokenizer = BertTokenizerFast.from_pretrained(MODEL_NAME)
+        mlflow.log_metric("initial_accuracy", initial_accuracy)
 
-        train_data = SentimentDataset(train_texts, train_targets, tokenizer, max_len=128)
-        val_data = SentimentDataset(val_texts, val_targets, tokenizer, max_len=128)
-        train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
-        val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False)
+        # CleanLab setup and processing
+        cv_n_folds = 3
+        cl = CleanLearning(clf, cv_n_folds=cv_n_folds)
+        label_issues = cl.find_label_issues(X=raw_train_texts, labels=train_labels)
 
-        model = BertForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=len(sentiments)).to(DEVICE)
+        # Use identified issues to refine training
+        updated_clf = cl.fit(X=raw_train_texts, labels=train_labels, label_issues=cl.get_label_issues())
+        updated_accuracy = updated_clf.score(raw_test_texts, test_labels)
+        print(f'Updated Accuracy: {updated_accuracy:.4f}')
 
-        optimizer = AdamW(model.parameters(), lr=2e-5)
-        for epoch in range(EPOCHS):
-            if progress_callback:
-                progress_callback((epoch + 1) / EPOCHS)
-            print(f'Epoch {epoch + 1}/{EPOCHS}')
-            print('-' * 10)
-            train_acc, train_loss = train_epoch(model, train_loader, optimizer, DEVICE)
-            print(f'Train loss: {train_loss}, accuracy: {train_acc}')
-            val_acc, val_report = eval_model(model, val_loader, DEVICE, sentiments)
-            print(f'Val accuracy: {val_acc}\n')
+        mlflow.log_metric("post_cleanlab_accuracy", updated_accuracy)
 
-            mlflow.log_metric("train_acc", train_acc)
-            mlflow.log_metric("train_loss", train_loss)
-            mlflow.log_metric("val_acc", val_acc)
-            #print(val_report)
-
-        torch.save(model, model_path)
-        result = mlflow.pytorch.log_model(model, "model")
-
-        mlflow.pytorch.log_model(model, "model")
+        # Saving model and tracking with MLflow
+        torch.save(clf.model, model_path)
+        mlflow.pytorch.log_model(clf.model, "model")
         mlflow.register_model(
             model_uri=f"runs:/{mlflow.active_run().info.run_id}/model",
             name=model_name
         )
-        df = mlflow.search_runs([experiment_id], order_by=["metrics.val_acc DESC"])
+
+        df = mlflow.search_runs([experiment_id], order_by=["metrics.post_cleanlab_accuracy DESC"])
         best_run_id = df.loc[0, 'run_id']
+        best_model_uri = f"runs:/{best_run_id}/model"
+        best_val_acc = df.loc[0, "metrics.post_cleanlab_accuracy"]
 
-        best_model_uri = f"runs:/{best_run_id}/model" #Best model
-
-
-        best_val_acc = df.loc[0, "metrics.val_acc"]
         print(f"Model Path: {model_path}")
         print(f"Best Model Run ID: {best_run_id}")
         print(f"Best Validation Accuracy: {best_val_acc:.2f}")
 
-        best_model = mlflow.pytorch.load_model(best_model_uri) # For further usage
+        best_model = mlflow.pytorch.load_model(best_model_uri)
+
     mlflow.end_run()
-    return model_path, best_run_id, best_val_acc, val_acc
+    return model_path, best_run_id, best_val_acc, updated_accuracy
