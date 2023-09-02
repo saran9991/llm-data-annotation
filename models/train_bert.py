@@ -210,40 +210,9 @@ def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_i
         clf = BertSentimentClassifier(epochs= epoch_input)
         clf.fit(raw_train_texts, train_labels)
         initial_accuracy = clf.score(raw_test_texts, test_labels)
-        print(f'Initial Accuracy: {initial_accuracy:.4f}')
+        print(f'Accuracy: {initial_accuracy:.4f}')
 
-        mlflow.log_metric("initial_accuracy", initial_accuracy)
-
-        # CleanLab setup and processing
-        cv_n_folds = 3
-        cl = CleanLearning(clf, cv_n_folds=cv_n_folds)
-        label_issues = cl.find_label_issues(X=raw_train_texts, labels=train_labels)
-
-        # Use identified issues to refine training
-        updated_clf = cl.fit(X=raw_train_texts, labels=train_labels, label_issues=cl.get_label_issues())
-        updated_accuracy = updated_clf.score(raw_test_texts, test_labels)
-        print(f'Updated Accuracy: {updated_accuracy:.4f}')
-
-        mlflow.log_metric("post_cleanlab_accuracy", updated_accuracy)
-
-        # Saving model and tracking with MLflow
-        torch.save(clf.model, model_path)
-        mlflow.pytorch.log_model(clf.model, "model")
-        mlflow.register_model(
-            model_uri=f"runs:/{mlflow.active_run().info.run_id}/model",
-            name=model_name
-        )
-
-        df = mlflow.search_runs([experiment_id], order_by=["metrics.post_cleanlab_accuracy DESC"])
-        best_run_id = df.loc[0, 'run_id']
-        best_model_uri = f"runs:/{best_run_id}/model"
-        best_val_acc = df.loc[0, "metrics.post_cleanlab_accuracy"]
-
-        print(f"Model Path: {model_path}")
-        print(f"Best Model Run ID: {best_run_id}")
-        print(f"Best Validation Accuracy: {best_val_acc:.2f}")
-
-        best_model = mlflow.pytorch.load_model(best_model_uri)
+        mlflow.log_metric("accuracy", initial_accuracy)
 
     mlflow.end_run()
-    return model_path, best_run_id, best_val_acc, updated_accuracy
+    return model_path, initial_accuracy, clf
