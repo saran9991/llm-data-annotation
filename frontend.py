@@ -20,6 +20,39 @@ from cleanlab.classification import CleanLearning
 from annotation.cleanlab_label_issues import get_dataframe_by_index
 from annotation.cleanlab_label_issues import find_label_issues
 
+if "new_save_path" not in st.session_state:
+    st.session_state.new_save_path = None
+
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+
+# Check if 'n_iterations' is in session state, if not, initialize it
+if 'n_iterations' not in st.session_state:
+    st.session_state.n_iterations = 1
+
+# Check if 'annotated_rows' is in session state, if not, initialize it
+if 'annotated_rows' not in st.session_state:
+    st.session_state.annotated_rows = {}
+
+def merge_and_save(main_dataset_path, top_20_error_rows):
+    main_dataset = pd.read_csv(main_dataset_path)
+
+    # Merging logic (adapted from the earlier provided code)
+    merged_dataset = main_dataset.merge(top_20_error_rows[['text', 'predicted_labels']], on='text', how='left')
+
+    merged_dataset['predicted_labels'] = merged_dataset['predicted_labels_y'].combine_first(
+        merged_dataset['predicted_labels_x'])
+    merged_dataset = merged_dataset.drop(columns=['predicted_labels_x', 'predicted_labels_y'])
+    merged_dataset = merged_dataset[
+        merged_dataset['predicted_labels'].apply(lambda x: x.lower() in ['positive', 'negative', 'neutral'])]
+
+    # Save the merged dataset
+    version = get_next_version(Path("data/cleaned"), 'cleaned_')
+    save_path = Path("data/cleaned") / f"cleaned_{version}.csv"
+    merged_dataset.to_csv(save_path, index=False)
+
+    return str(save_path)
+
 
 st.set_page_config(page_title="Data Annotation", page_icon="🚀", layout="wide")
 
@@ -147,65 +180,59 @@ if "filtered_dataset" in st.session_state:
                 st.session_state.initial_training_complete = True
                 st.session_state.clf = clf
 
-if "new_save_path" not in st.session_state:
-    st.session_state.new_save_path = None
+
 
 if st.session_state.get('initial_training_complete'):
-    # Only showing this button when initial training is done
-    if st.button('CleanLab Processing', key="cleanlab_processing_btn"):
-        st.session_state.n_iterations = st.number_input('Number of iterations for CleanLab:', min_value=1)
-        st.session_state.step = 1
+    st.session_state.n_iterations = st.number_input('Number of iterations for CleanLab:', min_value=1)
 
-    if st.session_state.get('step') and st.button('Iterative CleanLab Model Training', key="iterative_cleanlab_btn"):
-        try:
-            step = st.session_state.step
+    # Button to confirm number of iterations and proceed
+    if st.button("Proceed with Iterations"):
+        st.session_state.proceed = True
+    else:
+        st.session_state.proceed = False
 
-            if step == 1:
-                data_path = st.session_state.get("save_path")
-                if data_path is None:
-                    raise ValueError("The initial save path is not set!")
-            else:
-                data_path = f"data/annotated/cleaned/cleaned_{step - 1}.csv"
-                if not os.path.exists(data_path):
-                    raise FileNotFoundError(f"File {data_path} does not exist!")
+    if 'current_iteration' not in st.session_state:
+        st.session_state.current_iteration = 1
 
-            clf = st.session_state.clf
+    if 'cleaned_dataset_path' not in st.session_state:
+        st.session_state.cleaned_dataset_path = st.session_state.save_path  # the merged dataset path
 
-            top_20_error_rows = find_label_issues(clf, data_path)
-            st.dataframe(top_20_error_rows, use_container_width=True)
-            st.write(f"This is iteration {step}, please annotate the rows with label issues:")
+    if st.session_state.get('proceed', False) and st.session_state.current_iteration <= st.session_state.n_iterations:
+        st.write(f"Running iteration {st.session_state.current_iteration}...")
 
-            if not hasattr(st.session_state, 'annotated_rows'):
-                st.session_state.annotated_rows = {}
+        # Identify label issues
+        top_20_error_rows = find_label_issues(st.session_state.clf, st.session_state.cleaned_dataset_path)
+        st.dataframe(top_20_error_rows, use_container_width=True)
+        st.write(f"Please annotate the rows with label issues:")
 
-            row_options = list(top_20_error_rows.index)
-            row_selection = st.selectbox("Edit label for row:", options=row_options, key="row_selection_iterative_key")
-            label_options = ["negative", "neutral", "positive"]
-            new_label = st.selectbox("Select new label:", options=label_options, key="label_selection_iterative_key")
+        # Select row to annotate
+        row_options = list(top_20_error_rows.index)
+        row_selection = st.selectbox("Edit label for row:", options=row_options, key="row_selection_iterative_key")
+        label_options = ["negative", "neutral", "positive"]
+        new_label = st.selectbox("Select new label:", options=label_options, key="label_selection_iterative_key")
 
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col1:
-                if st.button("Update Label", key="update_label_iterative_btn"):
-                    top_20_error_rows.loc[row_selection, "predicted_labels"] = new_label
-                    # Display the updated dataframe again
-                    st.dataframe(top_20_error_rows, use_container_width=True)
+        # Update the label on button press
+        with st.columns([1, 2, 1])[0]:
+            if st.button("Update Label", key="update_label_iterative_btn"):
+                top_20_error_rows.loc[row_selection, "predicted_labels"] = new_label
+                # Display the updated dataframe again
+                st.dataframe(top_20_error_rows, use_container_width=True)
 
-            if st.button("Finish Annotations", key="finish_annotations_btn"):
-                prev_dataset_path = st.session_state.save_path if step == 1 else f"data/annotated/cleaned/cleaned_{step - 1}.csv"
-                prev_data = pd.read_csv(prev_dataset_path, encoding='unicode_escape')
+        # Finish annotations and move to next step
+        if st.button("Finish Annotations and Train", key="finish_annotations_btn"):
+            # Update the main dataset and save
+            new_dataset_path = merge_and_save(st.session_state.cleaned_dataset_path, top_20_error_rows)
 
-                updated_dataset = prev_data.merge(top_20_error_rows[['text', 'predicted_labels']], on='text', how='left')
-                updated_dataset['predicted_labels'] = updated_dataset['predicted_labels_y'].combine_first(updated_dataset['predicted_labels_x'])
-                updated_dataset = updated_dataset.drop(columns=['predicted_labels_x', 'predicted_labels_y'])
-                updated_dataset = updated_dataset[updated_dataset['predicted_labels'].apply(lambda x: x.lower() in ['positive', 'negative', 'neutral'])]
+            # Train a BERT model on this new dataset
+            model_path, val_acc, clf = train_bert(f"models/bert_sentiment_{st.session_state.current_iteration}.pt",
+                                                  new_dataset_path)
+            st.write(
+                f"Current Model's trained Validation Accuracy for iteration {st.session_state.current_iteration}: {val_acc:.2f}")
 
-                new_save_path = f"data/annotated/cleaned/cleaned_{step}.csv"
-                st.session_state.new_save_path = new_save_path
-                updated_dataset.to_csv(new_save_path, index=False)
+            # Increment the iteration and set the cleaned_dataset_path for the next iteration
+            st.session_state.current_iteration += 1
+            st.session_state.cleaned_dataset_path = new_dataset_path
 
-                # Move to next step once Finish Annotations is clicked.
-                st.session_state.step += 1
-
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+    else:
+        st.write("All iterations completed!")
 
