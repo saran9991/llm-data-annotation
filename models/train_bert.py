@@ -213,6 +213,6 @@ def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_i
         print(f'Accuracy: {initial_accuracy:.4f}')
 
         mlflow.log_metric("accuracy", initial_accuracy)
-
+    torch.save(clf, model_path)
     mlflow.end_run()
     return model_path, initial_accuracy, clf

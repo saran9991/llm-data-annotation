@@ -4,7 +4,7 @@ import pandas as pd
 from annotation.data_versioning import get_next_version
 from models.train_bert import train_bert
 from pathlib import Path
-
+import os
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizerFast, BertForSequenceClassification, AdamW
 from sklearn.base import BaseEstimator
