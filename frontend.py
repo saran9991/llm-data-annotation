@@ -13,7 +13,7 @@ from models.train_bert import train_bert
 import torch
 from transformers import BertForSequenceClassification
 from sklearn.model_selection import train_test_split
-
+import copy
 
 
 if "iteration" not in st.session_state:
@@ -23,11 +23,13 @@ if "initial_training" not in st.session_state:
     st.session_state.initial_training = False
 
 def find_label_issues(clf, data_path):
+    import pdb; pdb.set_trace()
     data = pd.read_csv(data_path, encoding='unicode_escape')
     raw_texts, raw_labels = data["text"].values, data["predicted_labels"].values
     raw_train_texts, raw_test_texts, raw_train_labels, raw_test_labels = train_test_split(raw_texts, raw_labels, test_size=0.2)
     cv_n_folds = 3
-    cl = CleanLearning(clf, cv_n_folds=cv_n_folds)
+    model_copy = copy.deepcopy(clf)
+    cl = CleanLearning(model_copy, cv_n_folds=cv_n_folds)
 
     encoder = LabelEncoder()
     encoder.fit(raw_train_labels)
@@ -206,19 +208,20 @@ def run_cleanlab_iteration():
             model_path = f"models/model_cleanlab_{st.session_state.iteration - 1}"
             model = load_your_model_method(model_path)
             data_path = f"data/cleaned/cleaned_{st.session_state.iteration - 1}.csv"
-            print('Model Path hehe:',model_path)
-            print('data_path hehe:', data_path)
+            print('Model Path:',model_path)
+            print('data_path:', data_path)
 
         # Button to find label issues
         if st.button("Find Label Issues", key="find_issues"):
+            #import pdb; pdb.set_trace()
             st.session_state.top_20 = find_label_issues(model, data_path)
             st.dataframe(st.session_state.top_20, use_container_width=True)  # Displaying the 20 label issues to the user
             st.session_state.top20_status = True
+            #import pdb; pdb.set_trace()
 
         # Present label issues for annotation
-        if st.session_state.get('top20_status', False):
+        #if st.session_state.get('top20_status', False):
             st.subheader("Label Issues for Annotation")
-
             # Option to change label
             row_options = list(st.session_state.top_20.index)
             row_selection = st.selectbox("Edit label for row:", options=row_options, key="row_selection")
@@ -230,23 +233,18 @@ def run_cleanlab_iteration():
                 if st.button("Update Label", key = 'update_iterative_button'):
                     st.session_state.top_20.loc[row_selection, 'predicted_labels'] = new_label
 
-            # Provide a separator or an action button to confirm the change before proceeding to other annotations.
-            st.write("----")  # Or you can use a button like "Confirm Change" to make sure user finishes this task before moving to the loop below.
+            st.write("----")
 
             # Button to merge and save cleaned data
             if st.button("Merge and Save Cleaned Data", key="merge_clean"):
                 original_data = pd.read_csv(data_path)
 
-                # Use the merge method to merge the top_20 dataset with the original dataset based on the 'text' column
                 merged_dataset = original_data.merge(st.session_state.top_20[['text', 'predicted_labels']],
                                                      on='text', how='left')
 
-                # Combine columns to ensure the new 'predicted_labels' column is used where available,
-                # and fallback to the old column otherwise
                 merged_dataset['predicted_labels'] = merged_dataset['predicted_labels_y'].combine_first(
                     merged_dataset['predicted_labels_x'])
 
-                # Drop the temporary columns created by the merge method
                 merged_dataset = merged_dataset.drop(columns=['predicted_labels_x', 'predicted_labels_y'])
 
                 # Save the merged dataset
@@ -265,12 +263,14 @@ def run_cleanlab_iteration():
             st.session_state.iteration += 1
 
 
-st.session_state.iteration = 1
+if "iteration" not in st.session_state:
+    st.session_state.iteration = 1
 
 if st.session_state.iteration >= 3:
     st.write("Maximum number of 3 iterations reached!")
 else:
     run_cleanlab_iteration()
+
 
 
 
