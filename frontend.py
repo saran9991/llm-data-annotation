@@ -16,9 +16,6 @@ from sklearn.model_selection import train_test_split
 import copy
 
 
-if "iteration" not in st.session_state:
-    st.session_state.iteration = 1
-
 if "initial_training" not in st.session_state:
     st.session_state.initial_training = False
 

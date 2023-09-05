@@ -6,5 +6,6 @@ mlruns/
 __pycache__/
 data/annotated/*.csv
 data/filtered/*.csv
+data/cleaned/*.csv
 data/merged/*.csv
 models/**/*.pt
