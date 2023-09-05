@@ -124,9 +124,11 @@ if "filtered_dataset" in st.session_state:
             if not hasattr(st.session_state, 'save_path'):
                 st.warning("No dataset available for training. Please upload, annotate, and then merge first.")
             else:
-                model_path, best_run_id, best_val_acc, val_acc = train_bert(f"models/{model_name_inp}", st.session_state.save_path, experiment_name, epoch_input, model_name_inp)
+                model_path, val_acc = train_bert(f"models/{model_name_inp}", st.session_state.save_path, experiment_name, epoch_input, model_name_inp)
                 st.success(f"Model trained successfully and saved at {model_path}", icon='✅')
                 st.write(f"Current Model's trained Validation Accuracy: {val_acc:.2f}")
-                st.write(f"Best Model Run ID: {best_run_id}")
-                st.write(f"Best Validation Accuracy: {best_val_acc:.2f}")
+                st.session_state.model_path = model_path
+                st.session_state.initial_training = True
+
+
 

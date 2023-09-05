@@ -169,17 +169,5 @@ def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_i
             model_uri=f"runs:/{mlflow.active_run().info.run_id}/model",
             name=model_name
         )
-        df = mlflow.search_runs([experiment_id], order_by=["metrics.val_acc DESC"])
-        best_run_id = df.loc[0, 'run_id']
-
-        best_model_uri = f"runs:/{best_run_id}/model" #Best model
-
-
-        best_val_acc = df.loc[0, "metrics.val_acc"]
-        print(f"Model Path: {model_path}")
-        print(f"Best Model Run ID: {best_run_id}")
-        print(f"Best Validation Accuracy: {best_val_acc:.2f}")
-
-        best_model = mlflow.pytorch.load_model(best_model_uri) # For further usage
     mlflow.end_run()
-    return model_path, best_run_id, best_val_acc, val_acc
+    return model_path, val_acc
