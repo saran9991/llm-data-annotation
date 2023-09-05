@@ -195,7 +195,7 @@ if 'iteration' in st.session_state and st.session_state.iteration > 0 and st.ses
     st.subheader(f"Iteration: {st.session_state.iteration}")
 
     # Load the appropriate model and dataset
-    if st.session_state.iteration == 1:
+    if st.session_state.iteration == 1 and st.session_state.initial_training == True:
         model = st.session_state.initial_model
         data_path = st.session_state.save_path
     else:
@@ -206,36 +206,67 @@ if 'iteration' in st.session_state and st.session_state.iteration > 0 and st.ses
     # Button to find label issues
     if st.button("Find Label Issues", key="find_issues"):
         st.session_state.top_20 = find_label_issues(model, data_path)
+        st.dataframe(st.session_state.top_20, use_container_width=True)  # Displaying the 20 label issues to the user
+        st.session_state.top20_status = True
 
     # Present label issues for annotation
-    if 'top_20' in st.session_state:
+    if st.session_state.get('top20_status', False):
         st.subheader("Label Issues for Annotation")
-        for idx, row in st.session_state.top_20.iterrows():
-            user_label = st.selectbox(f"Label for: {row['text']}", ["negative", "neutral", "positive"], key=f"label_{idx}")
-            st.session_state.top_20.at[idx, 'predicted_label'] = user_label
+
+        # Option to change label
+        row_options = list(st.session_state.top_20.index)
+        row_selection = st.selectbox("Edit label for row:", options=row_options, key="row_selection")
+        label_options = ["negative", "neutral", "positive"]
+        new_label = st.selectbox("Select new label:", options=label_options, key="new_label_selection")
+
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1:
+            if st.button("Update Label", key = 'update_iterative_button'):
+                st.session_state.top_20.loc[row_selection, 'predicted_labels'] = new_label
+
+        # Provide a separator or an action button to confirm the change before proceeding to other annotations.
+        st.write("----")  # Or you can use a button like "Confirm Change" to make sure user finishes this task before moving to the loop below.
 
         # Button to merge and save cleaned data
         if st.button("Merge and Save Cleaned Data", key="merge_clean"):
             original_data = pd.read_csv(data_path)
-            for idx, row in st.session_state.top_20.iterrows():
-                original_data.at[idx, 'predicted_label'] = row['predicted_label']
 
+            # Use the merge method to merge the top_20 dataset with the original dataset based on the 'text' column
+            merged_dataset = original_data.merge(st.session_state.top_20[['text', 'predicted_labels']],
+                                                 on='text', how='left')
+
+            # Combine columns to ensure the new 'predicted_labels' column is used where available,
+            # and fallback to the old column otherwise
+            merged_dataset['predicted_labels'] = merged_dataset['predicted_labels_y'].combine_first(
+                merged_dataset['predicted_labels_x'])
+
+            # Drop the temporary columns created by the merge method
+            merged_dataset = merged_dataset.drop(columns=['predicted_labels_x', 'predicted_labels_y'])
+
+            # Save the merged dataset
             save_cleaned_path = f"data/cleaned/cleaned_{st.session_state.iteration}.csv"
-            original_data.to_csv(save_cleaned_path, index=False)
+            merged_dataset.to_csv(save_cleaned_path, index=False)
             st.success(f"Cleaned data saved at: {save_cleaned_path}")
+            st.session_state.save_cleaned_path = save_cleaned_path
 
     # Button to train model with cleaned data
     if st.button("Train Model with Cleaned Data", key="train_cleaned"):
         new_model_name = f"model_cleanlab_{st.session_state.iteration}"
-        model_path, val_acc = train_bert(f"models/{new_model_name}", save_cleaned_path, 'Your_Experiment_Name', 'Number_of_Epochs', new_model_name)
+        model_path, val_acc, clf = train_bert(f"models/{new_model_name}", st.session_state.save_cleaned_path, 'llm_seminar_data_annotation',
+                                              2, new_model_name)
         st.success(f"Model trained successfully and saved at {model_path}. Validation Accuracy: {val_acc:.2f}")
         st.session_state[f'iteration_{st.session_state.iteration}_completed'] = True
 
-# Button to start the next iteration
-if st.session_state.get(f'iteration_{st.session_state.iteration}_completed', False):
-    if st.button("Start Next Iteration", key="start_iteration"):
-        st.session_state.iteration += 1
-    st.write(f"Starting Iteration: {st.session_state.iteration}")
+    # Button to start the next iteration
+    if st.session_state.get(f'iteration_{st.session_state.iteration}_completed', False):
+        if st.button("Start Next Iteration", key="start_iteration"):
+            st.session_state.iteration += 1
+            st.write(f"Starting Iteration: {st.session_state.iteration}")
+
+    # Note: Ensure that you initialize st.session_state.iteration somewhere in your code.
+    # If it's the first time the user is visiting the page, initialize it like:
+if "iteration" not in st.session_state:
+    st.session_state.iteration = 1
 
 # Load model function
 
