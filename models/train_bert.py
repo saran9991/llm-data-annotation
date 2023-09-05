@@ -170,4 +170,4 @@ def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_i
             name=model_name
         )
     mlflow.end_run()
-    return model_path, val_acc
+    return model_path, val_acc, model

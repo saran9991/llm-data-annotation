@@ -4,6 +4,62 @@ import pandas as pd
 from annotation.data_versioning import get_next_version
 from models.train_bert import train_bert
 from pathlib import Path
+import streamlit as st
+import pandas as pd
+from cleanlab.classification import CleanLearning
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from models.train_bert import train_bert
+import torch
+from transformers import BertForSequenceClassification
+from sklearn.model_selection import train_test_split
+
+
+
+if "iteration" not in st.session_state:
+    st.session_state.iteration = 1
+
+if "initial_training" not in st.session_state:
+    st.session_state.initial_training = False
+
+def find_label_issues(clf, data_path):
+    data = pd.read_csv(data_path, encoding='unicode_escape')
+    raw_texts, raw_labels = data["text"].values, data["predicted_labels"].values
+    raw_train_texts, raw_test_texts, raw_train_labels, raw_test_labels = train_test_split(raw_texts, raw_labels, test_size=0.2)
+    cv_n_folds = 3
+    cl = CleanLearning(clf, cv_n_folds=cv_n_folds)
+
+    encoder = LabelEncoder()
+    encoder.fit(raw_train_labels)
+    train_labels = encoder.transform(raw_train_labels)
+    test_labels = encoder.transform(raw_test_labels)
+
+    label_issues = cl.find_label_issues(X=raw_train_texts, labels=train_labels)
+    lowest_quality_labels = label_issues["label_quality"].argsort().to_numpy()
+
+    top_20_error_rows = get_dataframe_by_index(lowest_quality_labels[:20], raw_train_texts, raw_train_labels, encoder, label_issues)
+    print('TOP 20 ERROR ROWS ')
+    return top_20_error_rows
+
+def get_dataframe_by_index(index, raw_train_texts, raw_train_labels, encoder, label_issues):
+    df = pd.DataFrame(
+        {
+            "text": raw_train_texts,
+            "given_label": raw_train_labels,
+            "predicted_label": encoder.inverse_transform(label_issues["predicted_label"]),
+            "quality": label_issues["label_quality"]
+        }
+    )
+
+    return df.iloc[index]
+
+def load_your_model_method(path):
+    model = BertForSequenceClassification.from_pretrained("bert-base-uncased",
+                                                          num_labels=3)  # Assuming 3 labels: negative, neutral, and positive
+    model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+
+    return model
+    pass
 
 st.set_page_config(page_title="Data Annotation", page_icon="🚀", layout="wide")
 
@@ -124,11 +180,63 @@ if "filtered_dataset" in st.session_state:
             if not hasattr(st.session_state, 'save_path'):
                 st.warning("No dataset available for training. Please upload, annotate, and then merge first.")
             else:
-                model_path, val_acc = train_bert(f"models/{model_name_inp}", st.session_state.save_path, experiment_name, epoch_input, model_name_inp)
+                model_path, val_acc, model = train_bert(f"models/{model_name_inp}", st.session_state.save_path, experiment_name, epoch_input, model_name_inp)
                 st.success(f"Model trained successfully and saved at {model_path}", icon='✅')
                 st.write(f"Current Model's trained Validation Accuracy: {val_acc:.2f}")
                 st.session_state.model_path = model_path
+                st.session_state.initial_model = model
                 st.session_state.initial_training = True
 
+
+
+
+# Inform user of iteration number
+if 'iteration' in st.session_state and st.session_state.iteration > 0 and st.session_state.initial_training == True:
+    st.subheader(f"Iteration: {st.session_state.iteration}")
+
+    # Load the appropriate model and dataset
+    if st.session_state.iteration == 1:
+        model = st.session_state.initial_model
+        data_path = st.session_state.save_path
+    else:
+        model_path = f"models/model_cleanlab_{st.session_state.iteration - 1}"
+        model = load_your_model_method(model_path)
+        data_path = f"data/cleaned/cleaned_{st.session_state.iteration - 1}.csv"
+
+    # Button to find label issues
+    if st.button("Find Label Issues", key="find_issues"):
+        st.session_state.top_20 = find_label_issues(model, data_path)
+
+    # Present label issues for annotation
+    if 'top_20' in st.session_state:
+        st.subheader("Label Issues for Annotation")
+        for idx, row in st.session_state.top_20.iterrows():
+            user_label = st.selectbox(f"Label for: {row['text']}", ["negative", "neutral", "positive"], key=f"label_{idx}")
+            st.session_state.top_20.at[idx, 'predicted_label'] = user_label
+
+        # Button to merge and save cleaned data
+        if st.button("Merge and Save Cleaned Data", key="merge_clean"):
+            original_data = pd.read_csv(data_path)
+            for idx, row in st.session_state.top_20.iterrows():
+                original_data.at[idx, 'predicted_label'] = row['predicted_label']
+
+            save_cleaned_path = f"data/cleaned/cleaned_{st.session_state.iteration}.csv"
+            original_data.to_csv(save_cleaned_path, index=False)
+            st.success(f"Cleaned data saved at: {save_cleaned_path}")
+
+    # Button to train model with cleaned data
+    if st.button("Train Model with Cleaned Data", key="train_cleaned"):
+        new_model_name = f"model_cleanlab_{st.session_state.iteration}"
+        model_path, val_acc = train_bert(f"models/{new_model_name}", save_cleaned_path, 'Your_Experiment_Name', 'Number_of_Epochs', new_model_name)
+        st.success(f"Model trained successfully and saved at {model_path}. Validation Accuracy: {val_acc:.2f}")
+        st.session_state[f'iteration_{st.session_state.iteration}_completed'] = True
+
+# Button to start the next iteration
+if st.session_state.get(f'iteration_{st.session_state.iteration}_completed', False):
+    if st.button("Start Next Iteration", key="start_iteration"):
+        st.session_state.iteration += 1
+    st.write(f"Starting Iteration: {st.session_state.iteration}")
+
+# Load model function
 
 
