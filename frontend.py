@@ -17,7 +17,7 @@ import copy
 from models.train_bert import BertSentimentClassifier
 
 if "iteration" not in st.session_state:
-    st.session_state.iteration = 2
+    st.session_state.iteration = 1
 
 if "initial_training" not in st.session_state:
     st.session_state.initial_training = False
@@ -172,7 +172,7 @@ if "filtered_dataset" in st.session_state:
             st.error(f"An error occurred: {e}")
 
     if st.session_state.get('merged_successful'):
-        experiment_name = st.text_input("Enter the experiment name:", value="llm_seminar_data_annotation")
+        st.session_state.experiment_name = st.text_input("Enter the experiment name:", value="llm_seminar_data_annotation")
         epoch_input = int(st.text_input("Enter the number of Epochs for BERT Training:", value="1"))
         model_name_inp = st.text_input("Enter the model name:", value="bert_sentiment_gpt35_200.pt")
 
@@ -180,7 +180,7 @@ if "filtered_dataset" in st.session_state:
             if not hasattr(st.session_state, 'save_path'):
                 st.warning("No dataset available for training. Please upload, annotate, and then merge first.")
             else:
-                model_path, val_acc, model = train_bert(f"models/{model_name_inp}", st.session_state.save_path, experiment_name, epoch_input, model_name_inp)
+                model_path, val_acc, model = train_bert(f"models/{model_name_inp}", st.session_state.save_path, st.session_state.experiment_name, epoch_input, model_name_inp)
                 st.success(f"Model trained successfully and saved at {model_path}", icon='✅')
                 st.write(f"Current Model's trained Validation Accuracy: {val_acc:.2f}")
                 st.session_state.model_path = model_path
@@ -192,26 +192,21 @@ if "filtered_dataset" in st.session_state:
         if st.session_state.iteration == 1 and st.session_state.initial_training == True:
             st.session_state.current_model = st.session_state.initial_model
             st.session_state.current_data_path = st.session_state.save_path
-            print('data_path !!!!!!!!!!!!!:', st.session_state.current_data_path)
+            print('Iteration 1 data_path:', st.session_state.current_data_path)
 
         else:
             model_path = f"models/model_cleanlab_{st.session_state.iteration - 1}.pt"
-            #st.session_state.current_model = load_your_model_method(model_path)
-
-            loaded_model = torch.load(model_path, map_location=torch.device('cuda'))
-            loaded_model_weights = loaded_model.state_dict()
-            st.session_state.current_model = BertSentimentClassifier()
-            st.session_state.current_model.set_model_weights(loaded_model_weights)
+            loaded_model = torch.load(model_path)
+            st.session_state.current_model = loaded_model
             st.session_state.current_data_path = f"data/cleaned/cleaned_{st.session_state.iteration - 1}.csv"
-            print('Model Path:', st.session_state.current_model)
-            print('data_path:', st.session_state.current_data_path)
+
+            #print('Model Path:', st.session_state.current_model)
+            print('Iteration:',st.session_state.iteration, ' data_path:', st.session_state.current_data_path)
 
         # Button to find label issues
         if st.button("Find Label Issues", key="find_issues"):
-            st.session_state.top_20 = find_label_issues(st.session_state.current_model,
-                                                        st.session_state.current_data_path)
-            st.dataframe(st.session_state.top_20,
-                         use_container_width=True)  # Displaying the 20 label issues to the user
+            st.session_state.top_20 = find_label_issues(st.session_state.current_model, st.session_state.current_data_path)
+            st.dataframe(st.session_state.top_20, use_container_width=True)  # Displaying the 20 label issues to the user
             st.session_state.top20_status = True
 
         if st.session_state.top20_status == True:
@@ -244,6 +239,33 @@ if "filtered_dataset" in st.session_state:
                 merged_dataset.to_csv(save_cleaned_path, index=False)
                 st.success(f"Cleaned data saved at: {save_cleaned_path}")
                 st.session_state.save_cleaned_path = save_cleaned_path
+                setattr(st.session_state, f'data_cleaning_{st.session_state.iteration}', True)
+
+        if getattr(st.session_state, f'data_cleaning_{st.session_state.iteration}', False):
+            if st.button("Train Model on Cleaned Data"):
+                if not hasattr(st.session_state, 'save_cleaned_path'):
+                    st.warning("No dataset available for training. Please upload, annotate, and then merge first.")
+                else:
+                    model_path, val_acc, model = train_bert(f"models/model_cleanlab_{st.session_state.iteration}.pt", st.session_state.save_cleaned_path,
+                                                            st.session_state.experiment_name, epoch_input =1 , model_name_inp=f"model_cleanlab_{st.session_state.iteration}")
+                    st.success(f"Model trained successfully and saved at {model_path}", icon='✅')
+                    st.write(f"Model's trained Validation Accuracy on Cleaned Data: {val_acc:.2f}")
+                    st.session_state.model_path = model_path
+                    st.session_state.current_model = model
+                    st.session_state.bert_clean_training = True
+                    setattr(st.session_state, f'iteration_{st.session_state.iteration}', True)
+                    #st.write(st.session_state)
+
+        if getattr(st.session_state, f'iteration_{st.session_state.iteration}', False) and getattr(st.session_state, f'data_cleaning_{st.session_state.iteration}', False):
+            st.session_state.iteration += 1
+            st.session_state.top20_status = False
+            setattr(st.session_state, f'iteration_{st.session_state.iteration}', False)
+
+            if st.button("Next Iteration"):
+                pass
+
+
+
 
 
 

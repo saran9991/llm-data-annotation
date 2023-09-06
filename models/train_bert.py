@@ -90,6 +90,12 @@ class BertSentimentClassifier(BaseEstimator):
     def set_model_weights(self, state_dict):
         self.model.load_state_dict(state_dict)
 
+    def state_dict(self):
+        return self.model.state_dict()
+
+    def load_state_dict(self, state_dict):
+        return self.model.load_state_dict(state_dict)
+
 
 class SentimentDataset(Dataset):
     def __init__(self, texts, targets, tokenizer, max_len):
