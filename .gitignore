@@ -8,3 +8,4 @@ data/annotated/*.csv
 data/filtered/*.csv
 data/merged/*.csv
 models/**/*.pt
+.ssh/
