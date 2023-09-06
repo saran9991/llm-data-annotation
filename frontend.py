@@ -14,9 +14,10 @@ import torch
 from transformers import BertForSequenceClassification
 from sklearn.model_selection import train_test_split
 import copy
+from models.train_bert import BertSentimentClassifier
 
 if "iteration" not in st.session_state:
-    st.session_state.iteration = 1
+    st.session_state.iteration = 2
 
 if "initial_training" not in st.session_state:
     st.session_state.initial_training = False
@@ -57,12 +58,8 @@ def get_dataframe_by_index(index, raw_train_texts, raw_train_labels, encoder, la
     return df.iloc[index]
 
 def load_your_model_method(path):
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased",
-                                                          num_labels=3)  # Assuming 3 labels: negative, neutral, and positive
-    model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
-
+    model = torch.load(path, map_location=torch.device('cuda'))
     return model
-    pass
 
 st.set_page_config(page_title="Data Annotation", page_icon="🚀", layout="wide")
 
@@ -198,8 +195,13 @@ if "filtered_dataset" in st.session_state:
             print('data_path !!!!!!!!!!!!!:', st.session_state.current_data_path)
 
         else:
-            model_path = f"models/model_cleanlab_{st.session_state.iteration - 1}"
-            st.session_state.current_model = load_your_model_method(model_path)
+            model_path = f"models/model_cleanlab_{st.session_state.iteration - 1}.pt"
+            #st.session_state.current_model = load_your_model_method(model_path)
+
+            loaded_model = torch.load(model_path, map_location=torch.device('cuda'))
+            loaded_model_weights = loaded_model.state_dict()
+            st.session_state.current_model = BertSentimentClassifier()
+            st.session_state.current_model.set_model_weights(loaded_model_weights)
             st.session_state.current_data_path = f"data/cleaned/cleaned_{st.session_state.iteration - 1}.csv"
             print('Model Path:', st.session_state.current_model)
             print('data_path:', st.session_state.current_data_path)

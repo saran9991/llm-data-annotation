@@ -87,6 +87,9 @@ class BertSentimentClassifier(BaseEstimator):
         accuracy = (y_pred == y).mean()
         return accuracy
 
+    def set_model_weights(self, state_dict):
+        self.model.load_state_dict(state_dict)
+
 
 class SentimentDataset(Dataset):
     def __init__(self, texts, targets, tokenizer, max_len):
