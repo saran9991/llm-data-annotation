@@ -19,6 +19,9 @@ if "initial_training" not in st.session_state:
 if "top20_status" not in st.session_state:
     st.session_state.top20_status = False
 
+if "stop_iterations" not in st.session_state:
+    st.session_state.stop_iterations = False
+
 def find_label_issues(clf, data_path):
     data = pd.read_csv(data_path, encoding='unicode_escape')
     raw_texts, raw_labels = data["text"].values, data["predicted_labels"].values
@@ -181,7 +184,10 @@ if "filtered_dataset" in st.session_state:
                 st.session_state.initial_model = model
                 st.session_state.initial_training = True
 
-    if st.session_state.get('initial_training'):
+    if st.session_state.get('stop_iterations', False):
+        st.stop()
+
+    if st.session_state.get('initial_training') and not getattr(st.session_state, 'stop_iterations', False):
         st.subheader(f"Iteration: {st.session_state.iteration}")
         if st.session_state.iteration == 1 and st.session_state.initial_training == True:
             st.session_state.current_model = st.session_state.initial_model
@@ -255,8 +261,16 @@ if "filtered_dataset" in st.session_state:
             st.session_state.top20_status = False
             setattr(st.session_state, f'iteration_{st.session_state.iteration}', False)
 
-            if st.button("Next Iteration"):
-                pass
+            col_next, col_stop = st.columns(2)  # Creating two columns
+
+            with col_next:
+                if st.button("Next Iteration"):
+                    pass
+
+            with col_stop:
+                if st.button('Stop Iterative CleanLab processing'):
+                    st.session_state.stop_iterations = True
+
 
 
 
