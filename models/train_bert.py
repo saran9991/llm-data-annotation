@@ -2,7 +2,6 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizerFast, BertForSequenceClassification
 from torch.optim import AdamW
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import pandas as pd
 from tqdm import tqdm
@@ -13,10 +12,21 @@ import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
+from typing import Dict, Tuple, Optional, List
+from pathlib import Path
+from torch.optim.lr_scheduler import StepLR
 
-
+#Custom class for BERT to align it with scikit-learn
 class BertSentimentClassifier(BaseEstimator):
-    def __init__(self, model_path='bert-base-uncased', device=None, epochs = 1):
+    def __init__(self, model_path: str = 'bert-base-uncased', device: Optional[torch.device] = None, epochs: int = 1):
+        """
+        Initialize the BertSentimentClassifier with the given parameters.
+
+        Parameters:
+        - model_path (str): The path to the BERT model or the model name (default is 'bert-base-uncased').
+        - device (Optional[torch.device]): The device to use for model training (default is 'cuda' if available, else 'cpu').
+        - epochs (int): The number of training epochs (default is 1).
+        """
         self.model_path = model_path
         self.tokenizer = BertTokenizerFast.from_pretrained(model_path)
         self.model = BertForSequenceClassification.from_pretrained(model_path, num_labels=3)
@@ -25,10 +35,18 @@ class BertSentimentClassifier(BaseEstimator):
         self.max_len = 128
         self.epochs = epochs
 
-    def fit(self, X, y, progress_callback=None):
+    def fit(self, X, y, progress_callback=None) -> None:
+        """
+        Train the model using the given data.
+
+        Parameters:
+        - X: Input data.
+        - y: Target labels.
+        - progress_callback: A callback function to track training progress on UI (default is None).
+        """
         self.classes_ = np.unique(y)
 
-        train_data = SentimentDataset(X, y, self.tokenizer, max_len=self.max_len)
+        train_data = CustomDataset(X, y, self.tokenizer, max_len=self.max_len)
         train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
 
         optimizer = AdamW(self.model.parameters(), lr=2e-5)
@@ -41,7 +59,16 @@ class BertSentimentClassifier(BaseEstimator):
                 progress_callback(epoch + 1, self.epochs)
 
 
-    def predict(self, X):
+    def predict(self, X) -> np.array:
+        """
+        Predict the class labels for the given data.
+
+        Parameters:
+        - X: Input data.
+
+        Returns:
+        - np.array: Predicted class labels.
+        """
         X_list = X.tolist()
         encoding = self.tokenizer.batch_encode_plus(
             X_list,
@@ -62,7 +89,16 @@ class BertSentimentClassifier(BaseEstimator):
 
         return self.classes_[preds.cpu().numpy()]
 
-    def predict_proba(self, X):
+    def predict_proba(self, X) -> np.array:
+        """
+        Predict the class probabilities for the given data.
+
+        Parameters:
+        - X: Input data.
+
+        Returns:
+        - np.array: Predicted class probabilities.
+        """
         X_list = X.tolist()  # Convert to list
         encoding = self.tokenizer.batch_encode_plus(
             X_list,  # Updated this line
@@ -85,32 +121,88 @@ class BertSentimentClassifier(BaseEstimator):
 
         return probs.cpu().numpy()
 
-    def score(self, X, y):
+    def score(self, X, y) -> float:
+        """
+        Compute the accuracy of the model on the given test data and labels.
+
+        Parameters:
+        - X: Input data.
+        - y: Target labels.
+
+        Returns:
+        - float: Accuracy score.
+        """
         y_pred = self.predict(X)
         accuracy = (y_pred == y).mean()
         return accuracy
 
-    def set_model_weights(self, state_dict):
+    def set_model_weights(self, state_dict: dict) -> None:
+        """
+        Set the model weights from the given state dictionary.
+
+        Parameters:
+        - state_dict (dict): The state dictionary containing model weights.
+        """
         self.model.load_state_dict(state_dict)
 
-    def state_dict(self):
+    def state_dict(self) -> dict:
+        """
+        Get the model's state dictionary.
+
+        Returns:
+        - dict: Model's state dictionary.
+        """
         return self.model.state_dict()
 
-    def load_state_dict(self, state_dict):
+    def load_state_dict(self, state_dict: dict) -> None:
+        """
+        Load the model weights from the given state dictionary.
+
+        Parameters:
+        - state_dict (dict): The state dictionary containing model weights.
+        """
         return self.model.load_state_dict(state_dict)
 
 
-class SentimentDataset(Dataset):
-    def __init__(self, texts, targets, tokenizer, max_len):
+class CustomDataset(Dataset):
+    def __init__(self, texts: List[str], targets: List[int], tokenizer, max_len: int):
+        """
+        Initialize the CustomDataset with texts, targets, tokenizer, and a maximum sequence length.
+
+        Parameters:
+        - texts (List[str]): A list of input texts.
+        - targets (List[int]): A list of target labels or scores associated with the texts.
+        - tokenizer: An NLP tokenizer.
+        - max_len (int): The maximum sequence length to which the input texts should be truncated or padded.
+        """
         self.texts = texts
         self.targets = targets
         self.tokenizer = tokenizer
         self.max_len = max_len
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Return the number of items in the dataset.
+
+        Returns:
+        - int: The number of items in the dataset.
+        """
         return len(self.texts)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        """
+        Retrieve and tokenize the text at the given index and return it with the associated target.
+
+        Parameters:
+        - idx (int): The index of the item to retrieve.
+
+        Returns:
+        - dict: A dictionary containing the following elements:
+            - 'text' (str): The original text.
+            - 'input_ids' (torch.Tensor): The tokenized and encoded input text as a flattened tensor.
+            - 'attention_mask' (torch.Tensor): The attention mask indicating which tokens are part of the input text (flattened tensor).
+            - 'targets' (torch.Tensor): The target label or score as a PyTorch tensor with dtype=torch.long, indicating it's for classification tasks.
+        """
         text = str(self.texts[idx])
         target = self.targets[idx]
 
@@ -131,7 +223,22 @@ class SentimentDataset(Dataset):
             'targets': torch.tensor(target, dtype=torch.long)
         }
 
-def train_epoch(model, data_loader, optimizer, device, scheduler=None):
+def train_epoch(model, data_loader, optimizer, device, scheduler: Optional[StepLR] = None) -> Tuple[float, float]:
+    """
+    Trains the model for one epoch.
+
+    Parameters:
+    - model (nn.Module): The PyTorch model to be trained.
+    - data_loader (DataLoader): DataLoader providing the training data.
+    - optimizer (torch.optim.Optimizer): The optimizer for updating model parameters.
+    - device (torch.device): The device (e.g., 'cuda' or 'cpu') where the model and data should be loaded.
+    - scheduler (Optional[torch.optim.lr_scheduler._LRScheduler]): An optional learning rate scheduler.
+
+    Returns:
+    - Tuple containing:
+      1. Training accuracy.
+      2. Average training loss.
+    """
     model = model.train()
     losses = []
     correct_predictions = 0
@@ -159,7 +266,24 @@ def train_epoch(model, data_loader, optimizer, device, scheduler=None):
 
     return correct_predictions.double() / len(data_loader.dataset), np.mean(losses)
 
-def eval_model(model, data_loader, device, sentiments):
+def eval_model(model: nn.Module,
+               data_loader: DataLoader,
+               device: torch.device,
+               sentiments: Dict[str, int]) -> Tuple[float, str]:
+    """
+    Evaluate the model on a dataset.
+
+    Parameters:
+    - model: The model to be evaluated.
+    - data_loader: DataLoader providing the evaluation data.
+    - device: Device (e.g., 'cuda' or 'cpu') where the model and data should be loaded.
+    - sentiments: Dictionary of sentiment classes.
+
+    Returns:
+    - Tuple containing:
+      1. Evaluation accuracy.
+      2. Classification report string.
+    """
     model = model.eval()
 
     correct_predictions = 0
@@ -184,8 +308,26 @@ def eval_model(model, data_loader, device, sentiments):
     return correct_predictions.double() / len(data_loader.dataset), classification_report(real_values, predictions, target_names=sentiments.keys())
 
 
-def train_bert(model_path, train_data_path, test_data_path, experiment_name, epoch_input, model_name_inp, progress_callback=None ):
-    # MLflow setup
+def train_bert(model_path: str, train_data_path: str, test_data_path: str, experiment_name: str,
+               epoch_input: int, model_name_inp: str, progress_callback=None):
+    """
+    Train a BERT-based sentiment classifier and log metrics using MLflow.
+
+    Parameters:
+    - model_path (str): The path where the trained model will be saved.
+    - train_data_path (str): Path to the training data CSV file.
+    - test_data_path (str): Path to the testing data CSV file.
+    - experiment_name (str): Name of the MLflow experiment.
+    - epoch_input (int): Number of training epochs.
+    - model_name_inp (str): Name for the registered MLflow model.
+    - progress_callback: A callback function to track training progress (default is None).
+
+    Returns:
+    - Tuple containing:
+      1. Path to the saved model.
+      2. Accuracy on the test data.
+      3. Trained BERTSentimentClassifier instance.
+    """
     EXPERIMENT_NAME = experiment_name
     client = MlflowClient()
     experiment_id = client.get_experiment_by_name(EXPERIMENT_NAME)

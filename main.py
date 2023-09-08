@@ -1,3 +1,6 @@
+# This script is for annotating and BERT model fitting in the backend.
+# It does not involve any user interface (UI) operations.
+
 from annotation.annotate_gpt35 import analyze_gpt35
 import pandas as pd
 from sklearn.metrics import accuracy_score
@@ -5,7 +8,16 @@ from models.train_bert import train_bert
 from annotation.data_versioning import get_next_version
 import os
 
-def annotate_dataset(filepath):
+def annotate_dataset(filepath: str) -> str:
+    """
+    Annotate a dataset using GPT-3.5 and save the annotated dataset.
+
+    Parameters:
+    - filepath (str): Path to the unannotated dataset CSV file.
+
+    Returns:
+    - str: Path to the annotated dataset CSV file.
+    """
     unannotated = pd.read_csv(filepath, encoding='unicode_escape', index_col=[0])
     original_dataset = pd.read_csv('data/original/train.csv',encoding='unicode_escape')
 

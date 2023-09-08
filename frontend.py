@@ -1,26 +1,25 @@
 import requests
-from annotation.data_versioning import get_next_version
-from annotation.cleanlab_label_issues import find_label_issues
 from pathlib import Path
 import streamlit as st
 import pandas as pd
 from models.train_bert import train_bert
 import torch
 from sklearn.model_selection import train_test_split
+from annotation.data_versioning import get_next_version
+from annotation.cleanlab_label_issues import find_label_issues
 
+# Setting Streamlit page config
 st.set_page_config(page_title="Data Annotation", page_icon="🚀", layout="wide")
 
+# Inline CSS
 st.markdown(
     """
     <style>
-        /* Centering the button */
         div.row-widget.stButton > button {
             margin: auto;
             display: block;
-            transition: transform .2s; /* animation effect */
+            transition: transform .2s;
         }
-
-        /* Enlarge the button w hen hovering */
         div.row-widget.stButton > button:hover {
             transform: scale(1.05);
         }
@@ -30,38 +29,22 @@ st.markdown(
 )
 
 st.title("LLM Seminar Data Annotation  ✏️")
-st.write(
-    """
-    An interactive tool to annotate your dataset, preview annotations, and save changes.
-    """
-)
+st.write("An interactive tool to annotate your dataset, preview annotations, and save changes.")
 
-# Initialization
-if "iteration" not in st.session_state:
-    st.session_state.iteration = 1
+# Session state initialization
+session_keys = ["iteration", "initial_training", "top20_status", "stop_iterations", "display_top_20", "next_iteration"]
+for key in session_keys:
+    if key not in st.session_state:
+        st.session_state[key] = 1 if key == "iteration" else False
 
-if "initial_training" not in st.session_state:
-    st.session_state.initial_training = False
-
-if "top20_status" not in st.session_state:
-    st.session_state.top20_status = False
-
-if "stop_iterations" not in st.session_state:
-    st.session_state.stop_iterations = False
-
-if 'display_top_20' not in st.session_state:
-    st.session_state.display_top_20 = False
-
-if 'next_iteration' not in st.session_state:
-    st.session_state.next_iteration = False
-
-
-def cleanlab_style():
+# Helper functions
+def cleanlab_style() -> str:
+    """Loads cleanlab processing style from the frontend resources."""
     with open('frontend_resources/cleanlab_processing_style.html', 'r') as file:
         return file.read()
 
-
-def train_model_style(epoch_value):
+def train_model_style(epoch_value: int) -> str:
+    """Returns the train model style string with formatted epoch input."""
     with open("frontend_resources/train_model_style.html", "r") as f:
         content = f.read()
     return content.format(epoch_input=epoch_value)
