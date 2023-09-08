@@ -4,7 +4,7 @@
 This framework combines human expertise with the efficiency of Large Language Models (LLMs) like OpenAI's GPT-3.5 to simplify dataset annotation and model improvement. The iterative approach ensures the continuous improvement of data quality, and consequently, the performance of models fine-tuned using this data.  This not only saves time but also enables the creation of customized LLMs that leverage both human annotators and LLM-based precision.
 <h2 align="center">Architecture</h2>
 <p align="center">
-  <img src="./architecture.png" alt="Architecture">
+  <img src="./Architecture.png" alt="Architecture">
 </p>
 
 ## Features
