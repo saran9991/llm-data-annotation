@@ -45,8 +45,10 @@ def calculate_cost(total_tokens_used: int) -> Tuple[float, List[str]]:
         f"Index: {index}",
         f"Cost for this call: {call_cost}",
         f"Accumulated tokens so far: {accumulated_tokens}",
-        f"Accumulated cost so far: {accumulated_cost}"
+        f"Accumulated cost so far: {accumulated_cost}\n"
     ]
+    for log in logs:
+        print(log)
 
     return call_cost, logs
 
