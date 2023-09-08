@@ -7,5 +7,7 @@ __pycache__/
 data/annotated/*.csv
 data/filtered/*.csv
 data/merged/*.csv
+data/trainsets/*.csv
+data/testsets/*.csv
 models/**/*.pt
 .ssh/

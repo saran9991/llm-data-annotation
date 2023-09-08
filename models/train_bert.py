@@ -12,7 +12,6 @@ import mlflow
 import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 from sklearn.base import BaseEstimator
-from cleanlab.classification import CleanLearning
 from sklearn.preprocessing import LabelEncoder
 
 
@@ -181,8 +180,7 @@ def eval_model(model, data_loader, device, sentiments):
     return correct_predictions.double() / len(data_loader.dataset), classification_report(real_values, predictions, target_names=sentiments.keys())
 
 
-def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_inp,
-                             progress_callback=None):
+def train_bert(model_path, train_data_path, test_data_path, experiment_name, epoch_input, model_name_inp ):
     # MLflow setup
     EXPERIMENT_NAME = experiment_name
     client = MlflowClient()
@@ -201,13 +199,13 @@ def train_bert(model_path, data_path, experiment_name, epoch_input, model_name_i
         mlflow.log_param("model_name", model_name)
 
         #sentiments = {'positive': 0, 'neutral': 1, 'negative': 2}
-        data = pd.read_csv(data_path, encoding='unicode_escape')
-        data = data.dropna()
-        #data['predicted_labels'] = data['predicted_labels'].map(sentiments)
+        train_data = pd.read_csv(train_data_path, encoding='unicode_escape')
+        train_data = train_data.dropna()
+        test_data = pd.read_csv(test_data_path, encoding='unicode_escape')
+        test_data = test_data.dropna()
 
-        raw_texts, raw_labels = data["text"].values, data["predicted_labels"].values
-        raw_train_texts, raw_test_texts, raw_train_labels, raw_test_labels = train_test_split(raw_texts, raw_labels,
-                                                                                              test_size=0.2)
+        raw_train_texts, raw_train_labels = train_data["text"].values, train_data["predicted_labels"].values
+        raw_test_texts, raw_test_labels = test_data["text"].values, test_data["predicted_labels"].values
 
         # Label encoding the labels
         encoder = LabelEncoder()

@@ -12,7 +12,7 @@ accumulated_cost = 0
 cost_per_token = 0.0035 / 1000  # The total cost per token, input and output
 index = 0
 
-@retry(wait=wait_random_exponential(max=10), stop=stop_after_attempt(6))
+@retry(wait=wait_random_exponential(max=2), stop=stop_after_attempt(2))
 def analyze_gpt35(text):
     global index
     global accumulated_cost
