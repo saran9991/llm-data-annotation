@@ -1,0 +1,33 @@
+# Virtual environment
+venv/
+
+# Machine Learning artifacts and logs
+mlruns/
+
+# Editor and IDE directories
+.idea/
+
+# Python generated cache
+__pycache__/
+
+# Temporary or intermediary data files
+data/annotated/*.csv
+data/filtered/*.csv
+data/merged/*.csv
+data/trainsets/*.csv
+data/testsets/*.csv
+data/cleaned/*.csv
+
+# Model weights
+models/**/*.pt
+
+# Additional files to exclude
+*.log
+*.pyc
+*.pyo
+*.egg-info
+*.dist-info
+.DS_Store
+Thumbs.db
+*.git/
+*.gitignore
