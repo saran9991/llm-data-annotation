@@ -9,5 +9,6 @@ data/filtered/*.csv
 data/merged/*.csv
 data/trainsets/*.csv
 data/testsets/*.csv
+data/cleaned/*.csv
 models/**/*.pt
 .ssh/

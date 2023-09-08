@@ -25,7 +25,7 @@ class BertSentimentClassifier(BaseEstimator):
         self.max_len = 128
         self.epochs = epochs
 
-    def fit(self, X, y):
+    def fit(self, X, y, progress_callback=None):
         self.classes_ = np.unique(y)
 
         train_data = SentimentDataset(X, y, self.tokenizer, max_len=self.max_len)
@@ -36,6 +36,10 @@ class BertSentimentClassifier(BaseEstimator):
         for epoch in range(self.epochs):
             train_acc, train_loss = train_epoch(self.model, train_loader, optimizer, self.device)
             print(f'Epoch {epoch + 1}/{self.epochs} - Train loss: {train_loss}, accuracy: {train_acc}')
+
+            if progress_callback:
+                progress_callback(epoch + 1, self.epochs)
+
 
     def predict(self, X):
         X_list = X.tolist()
@@ -180,7 +184,7 @@ def eval_model(model, data_loader, device, sentiments):
     return correct_predictions.double() / len(data_loader.dataset), classification_report(real_values, predictions, target_names=sentiments.keys())
 
 
-def train_bert(model_path, train_data_path, test_data_path, experiment_name, epoch_input, model_name_inp ):
+def train_bert(model_path, train_data_path, test_data_path, experiment_name, epoch_input, model_name_inp, progress_callback=None ):
     # MLflow setup
     EXPERIMENT_NAME = experiment_name
     client = MlflowClient()
@@ -215,11 +219,17 @@ def train_bert(model_path, train_data_path, test_data_path, experiment_name, epo
 
         # Define classifier and fit
         clf = BertSentimentClassifier(epochs= epoch_input)
-        clf.fit(raw_train_texts, train_labels)
+        clf.fit(raw_train_texts, train_labels, progress_callback)
         initial_accuracy = clf.score(raw_test_texts, test_labels)
         print(f'Accuracy: {initial_accuracy:.4f}')
 
         mlflow.log_metric("accuracy", initial_accuracy)
+    mlflow.pytorch.log_model(clf.model, "model")
+
+    mlflow.register_model(
+        model_uri=f"runs:/{mlflow.active_run().info.run_id}/model",
+        name=model_name
+    )
     torch.save(clf, model_path)
     mlflow.end_run()
     return model_path, initial_accuracy, clf

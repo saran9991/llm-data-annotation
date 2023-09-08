@@ -54,12 +54,25 @@ if 'display_top_20' not in st.session_state:
 if 'next_iteration' not in st.session_state:
     st.session_state.next_iteration = False
 
+
+def cleanlab_style():
+    with open('frontend_resources/cleanlab_processing_style.html', 'r') as file:
+        return file.read()
+
+
+def train_model_style(epoch_value):
+    with open("frontend_resources/train_model_style.html", "r") as f:
+        content = f.read()
+    return content.format(epoch_input=epoch_value)
+
+
 uploaded_file = st.file_uploader("Choose a dataset (CSV)", type="csv")
 
 if uploaded_file:
     if st.button("Annotate"):
-        files = {'file': uploaded_file.getvalue()}
-        response = requests.post("http://127.0.0.1:8000/annotate_dataset/", files=files)
+        with st.spinner('Annotating rows using GPT 3.5...'):
+            files = {'file': uploaded_file.getvalue()}
+            response = requests.post("http://127.0.0.1:8000/annotate_dataset/", files=files)
 
         if response.json()["status"] == "success":
             st.success(f"Dataset annotated successfully! Saved to {response.json()['path']}")
@@ -135,8 +148,7 @@ if "filtered_dataset" in st.session_state:
 
             st.success(f"Dataset saved successfully at {save_path}")
             st.session_state.merged_successful = True
-
-            st.write('Allocating 20% of the rows as a hold-out test set for model training')
+            st.write('Allocating 20% of the rows as a hold-out test set')
 
             train_data, test_data = train_test_split(merged_dataset, test_size=0.2)
             print(type(train_data))
@@ -167,15 +179,25 @@ if "filtered_dataset" in st.session_state:
         model_name_inp = st.text_input("Enter the model name:", value="bert_sentiment_gpt35")
 
         if st.button("Train Model"):
+            training_message = train_model_style(epoch_input)
+            st.markdown(training_message, unsafe_allow_html=True)
+            progress_bar = st.empty()
+
+            def update_progress(current_epoch, total_epochs):
+                progress = current_epoch / total_epochs
+                progress_bar.progress(progress)  # Update the progress bar in its slot
+
             if not hasattr(st.session_state, 'save_path'):
                 st.warning("No dataset available for training. Please upload, annotate, and then merge first.")
             else:
-                model_path, val_acc, model = train_bert(model_path=f"models/{model_name_inp}",
+                model_path, val_acc, model = train_bert(model_path=f"models/{model_name_inp}.pt",
                                                         train_data_path=st.session_state.train_save_path,
                                                         test_data_path=st.session_state.test_set_path,
                                                         experiment_name=st.session_state.experiment_name,
                                                         epoch_input=epoch_input,
-                                                        model_name_inp=model_name_inp)
+                                                        model_name_inp=model_name_inp,
+                                                        progress_callback=update_progress
+                                                        )
 
                 st.success(f"Model trained successfully and saved at {model_path}", icon='✅')
                 st.write(f"Current Model's trained Validation Accuracy: {val_acc:.2f}")
@@ -187,6 +209,8 @@ if "filtered_dataset" in st.session_state:
         st.stop()
 
     if st.session_state.get('initial_training') and not getattr(st.session_state, 'stop_iterations', False):
+        heading_style = cleanlab_style()
+        st.markdown(heading_style, unsafe_allow_html=True)
         st.write("----")
         st.subheader(f"Iteration: {st.session_state.iteration}")
         if st.session_state.iteration == 1 and st.session_state.initial_training:
@@ -199,8 +223,6 @@ if "filtered_dataset" in st.session_state:
             loaded_model = torch.load(model_path)
             st.session_state.current_model = loaded_model
             st.session_state.current_data_path = f"data/cleaned/cleaned_{st.session_state.iteration - 1}.csv"
-
-            # print('Model Path:', st.session_state.current_model)
             print('Iteration:', st.session_state.iteration, ' data_path:', st.session_state.current_data_path)
 
         # Button to find label issues
@@ -252,6 +274,15 @@ if "filtered_dataset" in st.session_state:
                 st.text_input("Enter the number of Epochs for BERT Training:", value="1", key='ep_cl_inp'))
             model_name_inp = st.text_input("Enter the model name:", value="bert_sentiment_cleanlab", key='mname_cl_inp')
             if st.button("Train Model on Cleaned Data"):
+                training_message = train_model_style(epoch_input)
+                st.markdown(training_message, unsafe_allow_html=True)
+
+                progress_bar = st.empty()
+
+                def update_progress(current_epoch, total_epochs):
+                    progress = current_epoch / total_epochs
+                    progress_bar.progress(progress)  # Update the progress bar in its slot
+
                 if not hasattr(st.session_state, 'save_cleaned_path'):
                     st.warning("No dataset available for training. Please upload, annotate, and then merge first.")
                 else:
@@ -261,7 +292,8 @@ if "filtered_dataset" in st.session_state:
                         test_data_path=st.session_state.test_set_path,
                         experiment_name=st.session_state.experiment_name,
                         epoch_input=epoch_input,
-                        model_name_inp=model_name_inp)
+                        model_name_inp=model_name_inp,
+                        progress_callback=update_progress)
                     st.success(f"Model trained successfully and saved at {model_path}", icon='✅')
                     st.write(f"Model's trained Validation Accuracy on Cleaned Data: {val_acc:.2f}")
                     st.session_state.model_path = model_path
@@ -286,7 +318,6 @@ if "filtered_dataset" in st.session_state:
             with col_stop:
                 st.session_state.display_top_20 = False
                 st.session_state.next_iteration = False
-                #st.session_state.initial_training = False
                 if st.button('Stop Iterative CleanLab processing'):
                     st.write("----")
                     st.session_state.stop_iterations = True
